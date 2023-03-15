@@ -3,6 +3,7 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { AbiCoder, parseEther } from "ethers/lib/utils";
+import { BigNumber } from "ethers";
 
 const FEE = 500;
 
@@ -41,10 +42,11 @@ describe("CyclicArbitrage", function () {
 
       const loanAmount = parseEther("10");
       const fee = loanAmount.mul(1e6 - FEE).div(1e6);
+      const profit = parseEther("0.2");
 
       const mintTx = await token0.populateTransaction.mint(
         arbitrage.address,
-        fee
+        fee.add(profit)
       );
 
       const repayTx = await token0.populateTransaction.transfer(
@@ -52,14 +54,27 @@ describe("CyclicArbitrage", function () {
         loanAmount.add(fee)
       );
 
+      const profitBalanceTx = await token0.populateTransaction.balanceOf(
+        arbitrage.address
+      );
+
+      const profitTransferTx = await token0.populateTransaction.transfer(
+        owner.address,
+        1 // will be filled in with balance
+      );
+
+      const profitTransferInput = BigNumber.from(2).or(BigNumber.from(4 + 32).shl(24));
+
       const abiCoder = new AbiCoder();
 
       const data = abiCoder.encode(
-        ["tuple(address to, uint256 value, bytes data)[]"],
+        ["tuple(uint64 input, address to, uint256 value, bytes data)[]"],
         [
           [
-            [mintTx.to, 0, mintTx.data],
-            [repayTx.to, 0, repayTx.data],
+            [0, mintTx.to, 0, mintTx.data],
+            [0, repayTx.to, 0, repayTx.data],
+            [0, profitBalanceTx.to, 0, profitBalanceTx.data],
+            [profitTransferInput, profitTransferTx.to, 0, profitTransferTx.data],
           ],
         ]
       );
@@ -74,7 +89,19 @@ describe("CyclicArbitrage", function () {
         data
       );
 
-      //expect(await lock.owner()).to.equal(owner.address);
+      const gas = await arbitrage.estimateGas.uniswapV3Flash(
+        pool.address,
+        token0.address,
+        0,
+        arbitrage.address,
+        loanAmount,
+        0,
+        data
+      );
+
+      console.log("Gas: " + gas.toString());
+
+      expect(await token0.balanceOf(owner.address)).to.equal(profit);
     });
 
     // it("Should fail if the unlockTime is not in the future", async function () {

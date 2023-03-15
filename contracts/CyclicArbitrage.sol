@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.4;
+pragma solidity 0.8.19;
+
+import "hardhat/console.sol";
 
 interface IUniswapV3Pool {
     function flash(address recipient, uint256 amount0, uint256 amount1, bytes calldata data) external;
@@ -23,6 +25,7 @@ contract CyclicArbitrage {
     }
 
     struct FlashAction {
+        uint64 input;
         address to;
         uint256 value;
         bytes data;
@@ -59,11 +62,32 @@ contract CyclicArbitrage {
         (FlashAction[] memory actions) = abi.decode(data, (FlashAction[]));
         uint256 actionsLength = actions.length;
 
+        bytes[] memory outputs = new bytes[](actionsLength);
+
         for (uint256 i = 0; i < actionsLength; i++) {
             FlashAction memory action = actions[i];
 
-            (bool success, bytes memory returnData) = action.to.call{value: action.value}(action.data);
-            if (!success) revert CallFailed(i, returnData);
+            uint256 actionInput = action.input;
+            bytes memory actionData = action.data;
+
+            if (actionInput != 0) {
+                uint256 outputIndex = actionInput & 0xff;
+                uint256 outputStart = (actionInput & 0xffff00) >> 8;
+                uint256 dataStart = (actionInput & 0xffff000000) >> 24;
+
+                bytes memory output = outputs[outputIndex];
+
+                // add 32 to skip the bytes length
+                assembly ("memory-safe") {
+                    let d := mload(add(add(output, 32), outputStart))
+                    mstore(add(add(actionData, 32), dataStart), d)
+                }
+            }
+
+            (bool success, bytes memory outputData) = action.to.call{value: action.value}(actionData);
+            if (!success) revert CallFailed(i, outputData);
+
+            outputs[i] = outputData;
         }
     }
 
