@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test"
+    "test": "REPORT_GAS=true hardhat test"
   },
   "dependencies": {
     "@ethersproject/providers": "^5.4.7",
@@ -25,7 +25,7 @@
     "chai": "^4.2.0",
     "ethers": "^5.4.7",
     "hardhat": "^2.13.0",
-    "hardhat-gas-reporter": "^1.0.8",
+    "hardhat-gas-reporter": "^1.0.9",
     "solidity-coverage": "^0.8.1",
     "ts-node": "^10.9.1",
     "typechain": "^8.1.0",
